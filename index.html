@@ -1,187 +1,162 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Budget App</title>
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="manifest" href="manifest.json">
-<title>Budget App</title>
-<style>
-body{font-family:Arial;background:#f4f6f8;padding:20px}
-.dark{background:#121212;color:#fff}
-.card{background:#fff;padding:15px;border-radius:12px;margin-bottom:15px}
-.dark .card{background:#1e1e1e}
-button{padding:8px;margin:4px}
-</style>
-</head>
 
-<body>
-<h2>Budget App</h2>
-<button onclick="toggle()">🌙</button>
+</head>
+<body class="bg-gray-100 p-4">
+
 <div class="flex justify-between items-center mb-4">
   <h1 class="text-2xl font-bold">Budget Dashboard</h1>
-  <span id="role" class="text-sm text-gray-500"></span>
-</div>
-<div class="card">
-<input type="date" id="date">
-<input placeholder="Category" id="cat">
-<input placeholder="Description" id="desc">
-<input type="number" id="amt">
-<select id="type">
-<option>Income</option>
-<option>Expense</option>
-</select>
-<button onclick="add()">Save</button>
+  <div class="flex gap-2">
+    <span id="role" class="text-sm text-gray-500"></span>
+    <button onclick="toggleTheme()" class="px-2">🌙</button>
+  </div>
 </div>
 
-<div class="card">
-<table id="list"></table>
-</div>
-<canvas id="categoryChart"></canvas>
-<canvas id="monthlyChart"></canvas>
-<div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center">
-  <div class="bg-white p-4 rounded w-80">
-    <h3 class="font-bold mb-2">Edit Transaction</h3>
-    <input id="eid" hidden>
-    <input id="edate" type="date" class="w-full mb-2">
-    <input id="ecat" class="w-full mb-2">
-    <input id="edesc" class="w-full mb-2">
-    <input id="eamt" type="number" class="w-full mb-2">
-    <select id="etype" class="w-full mb-2">
+<!-- FORM -->
+<div class="bg-white p-4 rounded shadow mb-4">
+  <div class="grid grid-cols-2 gap-2">
+    <input id="date" type="date" class="border p-1">
+    <input id="category" placeholder="Category" class="border p-1">
+    <input id="desc" placeholder="Description" class="border p-1 col-span-2">
+    <input id="amount" type="number" placeholder="Amount" class="border p-1">
+    <select id="type" class="border p-1">
       <option>Income</option>
       <option>Expense</option>
     </select>
-    <button onclick="update()" class="bg-green-500 text-white w-full">Save</button>
   </div>
+  <button onclick="add()" class="mt-2 bg-green-500 text-white px-3 py-1 rounded">Save</button>
 </div>
-<button onclick='openEdit(${JSON.stringify(r)})'>✏️</button>
-<div class="admin-only flex gap-2 mt-4">
-  <button onclick="window.open(API+'?action=exportPDF')" class="bg-red-500 text-white px-3 py-1">PDF</button>
-  <button onclick="window.open(API+'?action=exportExcel')" class="bg-green-600 text-white px-3 py-1">Excel</button>
+
+<!-- TABLE -->
+<div class="bg-white p-4 rounded shadow mb-4">
+  <table class="w-full text-sm">
+    <thead><tr class="text-left"><th>Cat</th><th>Amt</th><th></th></tr></thead>
+    <tbody id="list"></tbody>
+  </table>
+</div>
+
+<!-- CHARTS -->
+<div class="grid md:grid-cols-2 gap-4">
+  <canvas id="catChart"></canvas>
+  <canvas id="monthChart"></canvas>
+</div>
+
+<!-- EXPORT -->
+<div class="mt-4 flex gap-2 admin-only">
+  <button onclick="pdf()" class="bg-red-500 text-white px-3 py-1 rounded">PDF</button>
+  <button onclick="excel()" class="bg-green-600 text-white px-3 py-1 rounded">Excel</button>
+</div>
+
+<!-- EDIT MODAL -->
+<div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center">
+  <div class="bg-white p-4 rounded w-80">
+    <input id="eid" hidden>
+    <input id="edate" type="date" class="border p-1 w-full mb-1">
+    <input id="ecat" class="border p-1 w-full mb-1">
+    <input id="edesc" class="border p-1 w-full mb-1">
+    <input id="eamt" type="number" class="border p-1 w-full mb-1">
+    <select id="etype" class="border p-1 w-full mb-2">
+      <option>Income</option>
+      <option>Expense</option>
+    </select>
+    <button onclick="update()" class="bg-green-500 text-white w-full">Update</button>
+  </div>
 </div>
 
 <script>
 const API = "https://script.google.com/macros/s/AKfycbyVSBcFx68gzPWg0UzaErjWuz7fYvJAZdyDsfpnRlm70j-5mnorb7jFk6QtLqBlUhKZdg/exec";
+let allData = [];
+let user;
 
-function toggle(){
-  document.body.classList.toggle("dark");
-  localStorage.theme=document.body.classList.contains("dark")?"dark":"light";
-}
-
-document.body.classList.toggle("dark",localStorage.theme==="dark");
+fetch(API+"?action=user",{method:"POST"}).then(r=>r.json()).then(u=>{
+  user=u;
+  role.innerText=u.role;
+  if(u.role!=="Admin"){
+    document.querySelectorAll(".admin-only").forEach(e=>e.remove());
+  }
+});
 
 function add(){
-  fetch(API+"?action=add",{method:"POST",
-    body:JSON.stringify({
-      date:date.value,
-      category:cat.value,
-      description:desc.value,
-      amount:amt.value,
-      type:type.value
-    })
-  }).then(load);
+  fetch(API+"?action=add",{method:"POST",body:JSON.stringify({
+    date:date.value, category:category.value, description:desc.value,
+    amount:amount.value, type:type.value
+  })}).then(load);
 }
 
 function load(){
-  fetch(API+"?action=list",{method:"POST"})
-    .then(r=>r.json())
-    .then(d=>{
-      list.innerHTML=d.map(r=>`
-        <tr>
-          <td>${r[2]}</td>
-          <td>${r[4]}</td>
-          <td><button onclick="del('${r[0]}')">🗑</button></td>
-        </tr>
-      `).join("");
-    });
+  fetch(API+"?action=list",{method:"POST"}).then(r=>r.json()).then(d=>{
+    allData=d;
+    list.innerHTML=d.map(r=>`
+      <tr>
+        <td>${r[2]}</td>
+        <td>${r[4]}</td>
+        <td>
+          <button onclick='edit(${JSON.stringify(r)})'>✏️</button>
+          <button onclick="del('${r[0]}')">🗑</button>
+        </td>
+      </tr>`).join("");
+    charts();
+  });
+}
+
+function edit(r){
+  modal.classList.remove("hidden");
+  eid.value=r[0]; edate.value=r[1].split("T")[0];
+  ecat.value=r[2]; edesc.value=r[3];
+  eamt.value=r[4]; etype.value=r[5];
+}
+
+function update(){
+  fetch(API+"?action=update",{method:"POST",body:JSON.stringify({
+    id:eid.value,date:edate.value,category:ecat.value,
+    description:edesc.value,amount:eamt.value,type:etype.value
+  })}).then(()=>{ modal.classList.add("hidden"); load(); });
 }
 
 function del(id){
-  fetch(API+"?action=delete",{method:"POST",
-    body:JSON.stringify({id})
-  }).then(load);
+  fetch(API+"?action=delete",{method:"POST",body:JSON.stringify({id})}).then(load);
+}
+
+function charts(){
+  const byCat={}, byMonth={};
+  allData.forEach(r=>{
+    if(r[5]==="Expense"){
+      byCat[r[2]]=(byCat[r[2]]||0)+r[4];
+      const m=new Date(r[1]).toLocaleString("default",{month:"short"});
+      byMonth[m]=(byMonth[m]||0)+r[4];
+    }
+  });
+
+  new Chart(catChart,{type:"pie",
+    data:{labels:Object.keys(byCat),datasets:[{data:Object.values(byCat)}]}
+  });
+
+  new Chart(monthChart,{type:"bar",
+    data:{labels:Object.keys(byMonth),datasets:[{data:Object.values(byMonth)}]}
+  });
+}
+
+function pdf(){
+  fetch(API+"?action=exportPDF",{method:"POST"})
+    .then(r=>r.json()).then(d=>window.open(d.url));
+}
+
+function excel(){
+  window.open(API+"?action=exportExcel","_blank");
+}
+
+function toggleTheme(){
+  document.body.classList.toggle("bg-gray-900");
 }
 
 load();
 </script>
-<script>
-if("serviceWorker" in navigator){
-  navigator.serviceWorker.register("service-worker.js");
-}
-
-  let currentUser;
-
-fetch(API+"?action=user",{method:"POST"})
-  .then(r=>r.json())
-  .then(u=>{
-    currentUser = u;
-    role.innerText = u.role;
-    if (u.role !== "Admin") {
-      document.querySelectorAll(".admin-only")
-        .forEach(e=>e.classList.add("hidden"));
-    }
-  });
-
-function drawCategoryChart(data){
-  const map = {};
-  data.forEach(r=>{
-    if(r[5]==="Expense"){
-      map[r[2]] = (map[r[2]]||0)+r[4];
-    }
-  });
-
-  new Chart(categoryChart,{
-    type:"pie",
-    data:{
-      labels:Object.keys(map),
-      datasets:[{data:Object.values(map)}]
-    }
-  });
-}
-
-  function drawMonthlyChart(data){
-  const map={};
-  data.forEach(r=>{
-    if(r[5]==="Expense"){
-      const m=new Date(r[1]).toLocaleString("default",{month:"short"});
-      map[m]=(map[m]||0)+r[4];
-    }
-  });
-
-  new Chart(monthlyChart,{
-    type:"bar",
-    data:{
-      labels:Object.keys(map),
-      datasets:[{data:Object.values(map)}]
-    }
-  });
-}
-function openEdit(r){
-  modal.classList.remove("hidden");
-  eid.value=r[0];
-  edate.value=r[1].split("T")[0];
-  ecat.value=r[2];
-  edesc.value=r[3];
-  eamt.value=r[4];
-  etype.value=r[5];
-}
-
-function update(){
-  fetch(API+"?action=update",{method:"POST",
-    body:JSON.stringify({
-      id:eid.value,
-      date:edate.value,
-      category:ecat.value,
-      description:edesc.value,
-      amount:eamt.value,
-      type:etype.value
-    })
-  }).then(()=>{ modal.classList.add("hidden"); load(); });
-}
-drawCategoryChart(data);
-drawMonthlyChart(data);
-
-</script>
-
 </body>
 </html>
