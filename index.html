@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="manifest" href="manifest.json">
 <title>Budget App</title>
@@ -16,7 +18,10 @@ button{padding:8px;margin:4px}
 <body>
 <h2>Budget App</h2>
 <button onclick="toggle()">🌙</button>
-
+<div class="flex justify-between items-center mb-4">
+  <h1 class="text-2xl font-bold">Budget Dashboard</h1>
+  <span id="role" class="text-sm text-gray-500"></span>
+</div>
 <div class="card">
 <input type="date" id="date">
 <input placeholder="Category" id="cat">
@@ -31,6 +36,28 @@ button{padding:8px;margin:4px}
 
 <div class="card">
 <table id="list"></table>
+</div>
+<canvas id="categoryChart"></canvas>
+<canvas id="monthlyChart"></canvas>
+<div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center">
+  <div class="bg-white p-4 rounded w-80">
+    <h3 class="font-bold mb-2">Edit Transaction</h3>
+    <input id="eid" hidden>
+    <input id="edate" type="date" class="w-full mb-2">
+    <input id="ecat" class="w-full mb-2">
+    <input id="edesc" class="w-full mb-2">
+    <input id="eamt" type="number" class="w-full mb-2">
+    <select id="etype" class="w-full mb-2">
+      <option>Income</option>
+      <option>Expense</option>
+    </select>
+    <button onclick="update()" class="bg-green-500 text-white w-full">Save</button>
+  </div>
+</div>
+<button onclick='openEdit(${JSON.stringify(r)})'>✏️</button>
+<div class="admin-only flex gap-2 mt-4">
+  <button onclick="window.open(API+'?action=exportPDF')" class="bg-red-500 text-white px-3 py-1">PDF</button>
+  <button onclick="window.open(API+'?action=exportExcel')" class="bg-green-600 text-white px-3 py-1">Excel</button>
 </div>
 
 <script>
@@ -81,6 +108,77 @@ load();
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("service-worker.js");
 }
+
+  let currentUser;
+
+fetch(API+"?action=user",{method:"POST"})
+  .then(r=>r.json())
+  .then(u=>{
+    currentUser = u;
+    role.innerText = u.role;
+    if (u.role !== "Admin") {
+      document.querySelectorAll(".admin-only")
+        .forEach(e=>e.classList.add("hidden"));
+    }
+  });
+
+function drawCategoryChart(data){
+  const map = {};
+  data.forEach(r=>{
+    if(r[5]==="Expense"){
+      map[r[2]] = (map[r[2]]||0)+r[4];
+    }
+  });
+
+  new Chart(categoryChart,{
+    type:"pie",
+    data:{
+      labels:Object.keys(map),
+      datasets:[{data:Object.values(map)}]
+    }
+  });
+}
+
+  function drawMonthlyChart(data){
+  const map={};
+  data.forEach(r=>{
+    if(r[5]==="Expense"){
+      const m=new Date(r[1]).toLocaleString("default",{month:"short"});
+      map[m]=(map[m]||0)+r[4];
+    }
+  });
+
+  new Chart(monthlyChart,{
+    type:"bar",
+    data:{
+      labels:Object.keys(map),
+      datasets:[{data:Object.values(map)}]
+    }
+  });
+}
+function openEdit(r){
+  modal.classList.remove("hidden");
+  eid.value=r[0];
+  edate.value=r[1].split("T")[0];
+  ecat.value=r[2];
+  edesc.value=r[3];
+  eamt.value=r[4];
+  etype.value=r[5];
+}
+
+function update(){
+  fetch(API+"?action=update",{method:"POST",
+    body:JSON.stringify({
+      id:eid.value,
+      date:edate.value,
+      category:ecat.value,
+      description:edesc.value,
+      amount:eamt.value,
+      type:etype.value
+    })
+  }).then(()=>{ modal.classList.add("hidden"); load(); });
+}
+
 </script>
 
 </body>
